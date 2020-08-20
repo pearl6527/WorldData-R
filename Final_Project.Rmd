@@ -1,0 +1,646 @@
+---
+title: "Final Project"
+author: "(NA)"
+date: 
+output:
+  word_document: default
+  html_document: default
+subtitle: S&DS 230/530
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Some handy libraries
+library(car)
+library(leaps)
+library(lubridate)
+library(rvest)
+library(corrplot)
+library(lattice)
+source("http://www.reuningscherer.net/s&ds230/Rfuncs/regJDRS.txt")
+
+```
+
+
+## S&DS 230/530 Final Project
+
+### **Introduction**
+I wish to explore the relationships among various measures of a country. I considered using the World Bank dataset provided on Canvas, but I wanted to practice scraping data off websites (I like the dynamic element of it), so I decided to do so. In this project, I explore the correlation between life expectancy and median age, the difference in the mean democratic index of countries that recognize same-sex marriage and those that do not, the homicide rate of a country as predicted by military expenditure and continent, and the homicide rate as predicted by a number of continuous variables.
+
+### **DATA**
+
+* Status of same-sex marriage (categorical; recognized, including performed, legal, etc.)
+* Continent (categorical)
+* Democracy index (categorical; a measure of the state of democracy compiled by the Economist Intelligence Unit)
+* CO2 emission (continuous; metric tons)
+* Energy use (continuous; KWH)
+* Median age (continuous; years)
+* Life expectancy at birth (continuous; years)
+* Total fertility rate (continuous; children born per woman)
+* Infant mortality (continuous; deaths per 1000)
+* Homicide rate in 2017 (continuous; homicide deaths per 100000)
+* GDP Per Capita (continuous; USD)
+* Current account balance (continuous; USD)
+* Exports (continuous; USD)
+* Imports (continuous; USD)
+
+### **Data Cleaning Process**
+
+The data used in this project are from several sources:   
+  1. [The World Factbook](https://www.cia.gov/library/publications/the-world-factbook/docs/rankorderguide.html)   
+  2. The [Wikipedia page on the legal status of same-sex marriage](https://en.wikipedia.org/wiki/Legal_status_of_same-sex_marriage)   
+  3. [This .csv file](https://pkgstore.datahub.io/JohnSnowLabs/country-and-continent-codes-list/country-and-continent-codes-list-csv_csv/data/b7876b7f496677669644f3d1069d3121/country-and-continent-codes-list-csv_csv.csv) posted on DataHub by someone called JohnSnowLabs   
+  4. Democracy index information downloaded from [here](https://worldpopulationreview.com/countries/democracy-countries/) as a .csv file   
+  5. Homicide statistics from 1990 to 2017, downloaded from [here](https://ourworldindata.org/grapher/homicide-rate), sourced from [IHME](http://ghdx.healthdata.org/gbd-results-tool)   
+
+#### The World Factbook
+The following variables are obtained via web scraping from the World Factbook: CO2 emission, Energy use, Population, Median age, Life expectancy at birth, Total fertility rate, Infant mortality, GDP Per Capita, Current account balance, Exports, Imports. Data cleaning mainly included using `gsub()` to remove symbols like ',' and '$' from numerical data.   
+The following is the code I used to scrape data for CO2 emission in various countries:
+
+```{r}
+url7 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/274rank.html"
+webpage7 <- read_html(url7)
+countries7 <- html_text(html_nodes(webpage7, '#rankOrder a'))
+CO2emission <- html_text(html_nodes(webpage7, '.region+ td'))
+CO2emission <- as.numeric(gsub(",", "", CO2emission))
+countryCO2 <- data.frame(country = countries7, CO2 = CO2emission, stringsAsFactors = FALSE)
+```
+```{r, include = FALSE}
+#country internet users
+url6 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/204rank.html"
+webpage6 <- read_html(url6)
+countries6 <- html_text(html_nodes(webpage6, '#rankOrder a'))
+webUsers <- html_text(html_nodes(webpage6, '.region+ td'))
+webUsers <- as.numeric(gsub(",", "", webUsers))
+countryIntUsers <- data.frame(country = countries6, intUsers = webUsers, stringsAsFactors = FALSE)
+
+#country median age
+url9 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/343rank.html"
+webpage9 <- read_html(url9)
+countries9 <- html_text(html_nodes(webpage9, '#rankOrder a'))
+medAge <- html_text(html_nodes(webpage9, '.region+ td'))
+medAge <- as.numeric(gsub(",", "", medAge))
+countryMedAge <- data.frame(country = countries9, medianAge = medAge, stringsAsFactors = FALSE)
+
+#country energy use (KWH)
+url10 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/253rank.html"
+webpage10 <- read_html(url10)
+countries10 <- html_text(html_nodes(webpage10, '#rankOrder a'))
+energyUse <- html_text(html_nodes(webpage10, '.region+ td'))
+energyUse <- as.numeric(gsub(",", "", energyUse))
+countryEnergyUse <- data.frame(country = countries10, energyCons = energyUse, stringsAsFactors = FALSE)
+
+#country life expectancy at birth
+url12 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/355rank.html"
+webpage12 <- read_html(url12)
+countries12 <- html_text(html_nodes(webpage12, '#rankOrder a'))
+lifeEx <- html_text(html_nodes(webpage12, '.region+ td'))
+lifeEx <- as.numeric(gsub(",", "", lifeEx))
+countryLifeEx <- data.frame(country = countries12, lifeExpect = lifeEx, stringsAsFactors = FALSE)
+
+#country total fertility (children born per woman)
+url13 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/356rank.html"
+webpage13 <- read_html(url13)
+countries13 <- html_text(html_nodes(webpage13, '#rankOrder a'))
+fertility <- html_text(html_nodes(webpage13, '.region+ td'))
+fertility <- as.numeric(gsub(",", "", fertility))
+countryFertility <- data.frame(country = countries13, totalFert = fertility, stringsAsFactors = FALSE)
+
+#military expenditures (% OF GDP)
+url14 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/330rank.html"
+webpage14 <- read_html(url14)
+countries14 <- html_text(html_nodes(webpage14, '#rankOrder a'))
+milExp <- html_text(html_nodes(webpage14, '.region+ td'))
+milExp <- as.numeric(gsub(",", "", milExp))
+countryMilExp <- data.frame(country = countries14, militaryExp = milExp, stringsAsFactors = FALSE)
+
+#current account balance (Current account balance compares a country's net trade in goods and services, plus net earnings, and net transfer payments to and from the rest of the world during the period specified. These figures are calculated on an exchange rate basis.)
+url15 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/238rank.html"
+webpage15 <- read_html(url15)
+countries15 <- html_text(html_nodes(webpage15, '#rankOrder a'))
+currentAcc <- html_text(html_nodes(webpage15, '.region+ td'))
+currentAcc <- as.numeric(gsub(",|\\$", "", currentAcc))
+countryCurrentAcc <- data.frame(country = countries15, currentAccount = currentAcc, stringsAsFactors = FALSE)
+
+#GDP per capita
+url18 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/211rank.html"
+webpage18 <- read_html(url18)
+countries18 <- html_text(html_nodes(webpage18, '#rankOrder a'))
+GDPpc <- html_text(html_nodes(webpage18, '.region+ td'))
+GDPpc <- as.numeric(gsub(",|\\$", "", GDPpc))
+countryGDP <- data.frame(country = countries18, GDP = GDPpc, stringsAsFactors = FALSE)
+
+#population
+url19 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/335rank.html"
+webpage19 <- read_html(url19)
+countries19 <- html_text(html_nodes(webpage19, '#rankOrder a'))
+pop <- html_text(html_nodes(webpage19, '.region+ td'))
+pop <- as.numeric(gsub(",", "", pop))
+countryPop <- data.frame(country = countries19, Population = pop, stringsAsFactors = FALSE)
+
+#infant mortality (deaths per 1000)
+url20 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/354rank.html"
+webpage20 <- read_html(url20)
+countries20 <- html_text(html_nodes(webpage20, '#rankOrder a'))
+infantMort <- html_text(html_nodes(webpage20, '.region+ td'))
+infantMort <- as.numeric(gsub(",", "", infantMort))
+countryInfMort <- data.frame(country = countries20, infMortality = infantMort, stringsAsFactors = FALSE)
+
+#exports (USD)
+url21 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/239rank.html"
+webpage21 <- read_html(url21)
+countries21 <- html_text(html_nodes(webpage21, '#rankOrder a'))
+exports <- html_text(html_nodes(webpage21, '.region+ td'))
+exports <- as.numeric(gsub(",|\\$", "", exports))
+countryExports <- data.frame(country = countries21, exportsUSD = exports, stringsAsFactors = FALSE)
+
+#imports (USD)
+url22 <- "https://www.cia.gov/library/publications/the-world-factbook/fields/242rank.html"
+webpage22 <- read_html(url22)
+countries22 <- html_text(html_nodes(webpage22, '#rankOrder a'))
+imports <- html_text(html_nodes(webpage22, '.region+ td'))
+imports <- as.numeric(gsub(",|\\$", "", imports))
+countryImports <- data.frame(country = countries22, importsUSD = imports, stringsAsFactors = FALSE)
+
+#all <- Reduce(intersect, list(countries2, countries3, countries4, countries5, countries6, countries7, countries8, countries9, countries10, countries11, countries12, countries13, countries14, countries15, countries16, countries17, countries18, countries19, countries20, countries21, countries22))
+```
+
+I created a dataframe for each variable, then combined each mini dataframe by using `myMerge()`, a function I wrote to merge dataframes by variable "country" so that I could use `Reduce()`.
+
+```{r}
+myMerge <- function(x, y) {
+  return(merge(x, y, by = "country", all = TRUE))
+}
+
+worldFacts <- Reduce(myMerge, list(countryCO2, countryCurrentAcc, countryEnergyUse, countryExports, countryImports, countryInfMort, countryIntUsers, countryFertility, countryGDP, countryLifeEx, countryMedAge, countryMilExp, countryPop))
+```
+
+```{r, include = FALSE}
+dim(worldFacts)
+#head(worldFacts, 20)
+```
+
+#### Status of Same-Sex Marriage
+In order to get the data for the status of same-sex marriage in various countries, I created a dataframe `sameSexMar` of countries on the Wikipedia page that recognize same-sex marriage and a variable called `SameSexMarriage` that has a value of "Recognized" for every country initially in the dataframe, then merged this dataframe with the `worldFacts` dataframe I created from the World Factbook data. Next I replaced all the NAs in `SameSexMarriage` in the merged `worldFacts` dataframe with "Not recognized", and made this variable a factor.
+
+```{r, include = FALSE}
+#same sex marriage
+url <- "https://en.wikipedia.org/wiki/Legal_status_of_same-sex_marriage"
+#browseURL(url)
+webpage <- read_html(url)
+legal <- html_text(html_nodes(webpage, '.standard .flagicon+ a'))
+performed <- html_text(html_nodes(webpage, 'b+ .column-width a'))
+recognized <- html_text(html_nodes(webpage, 'p+ .column-width a'))
+recognized <- unique(c(performed, recognized))
+```
+```{r}
+sameSexMar <- data.frame(country = recognized, SameSexMarriage = c(rep("Recognized", length(recognized))), stringsAsFactors = FALSE) #create dataframe
+worldFacts <- myMerge(worldFacts, sameSexMar) #merge dataframes
+worldFacts$SameSexMarriage[is.na(worldFacts$SameSexMarriage)] <- c(rep("Not recognized", length(worldFacts$SameSexMarriage[is.na(worldFacts$SameSexMarriage)]))) #assign new value to NAs
+worldFacts$SameSexMarriage <- as.factor(worldFacts$SameSexMarriage) #turn variable from string to factor
+```
+```{r, include = FALSE}
+head(worldFacts, 20)
+worldFacts$orig <- c(rep(1, length(worldFacts$country))) #indicator for whether the data was originally in the worldFacts dataset
+```
+
+#### Countries and Continents
+The .csv file of the continents of various countries required a lot of cleaning, since many of the country names in this file are different from the names of the same countries in the `worldFacts` dataframe. To facilitate the process, I wrote a function `replaceNames()` that takes in a vector to clean, a vector of things to swap out, and a corresponding vector of things to swap in. (For an example of it running, see the next section.)
+
+```{r}
+replaceNames <- function(stringVec, swapOut, swapIn) {
+  for (i in 1:length(swapOut)) {
+    stringVec <- gsub(swapOut[i], swapIn[i], stringVec)
+  }
+  return(stringVec)
+}
+```
+```{r, include = FALSE}
+regions <- read.csv("https://pkgstore.datahub.io/JohnSnowLabs/country-and-continent-codes-list/country-and-continent-codes-list-csv_csv/data/b7876b7f496677669644f3d1069d3121/country-and-continent-codes-list-csv_csv.csv", as.is = TRUE)
+#head(regions, 20)
+regions <- regions[!duplicated(regions$Country_Name), ]
+
+#both <- intersect(regions$Country_Name, worldFacts$country)
+#regions$Country_Name[!regions$Country_Name %in% both]
+#worldFacts$country[!worldFacts$country %in% both]
+
+backupNames <- regions$Country_Name
+testNames <- regions$Country_Name
+
+testNames <- replaceNames(
+  testNames,
+  c("Korea, Democratic People's Republic of", "Korea, Republic of", "Gambia,.*",
+    ", Islamic Republic of|, .*Republic of.*|, Principality of|, Argentine Republic|, Commonwealth of.*|, Kingdom of.*|, Federative Republic of| Darussalam|, Union of the|, State of|, French Republic|, Italian Republic|, Hashemite Kingdom of|, Lebanese Republic|, Grand Duchy of|, United Mexican States|, Sultanate of|, Independent State of|, Portuguese Republic|n Federation$|, Federation of|, Somali Republic|, Swiss Confederation|n Arab Republic|, Togolese Republic|, Tunisian Republic|, Arab Republic of|, Bailiwick of|, Bolivarian Republic of", 
+    "Antarctica.*", "Bahamas.*", "Bouvet Island.*", "British Indian Ocean Territory.*", "Myanmar.*", "Czech Republic", "Falkland Islands \\(Malvinas\\)", "South Georgia and the South Sandwich Islands", "French Southern Territories", "Gabon.*", "Fiji.*", "Greece.*", "Guyana.*", "Holy See.*", "Hong Kong.*", "Kyrgyz Republic", "Lao .*", "Libya.*", "Macao,.*", "^Cura.*", "Sint Maarten.*", "United States Minor Outlying Islands", "^Saint Helena$", "Slovakia.*", "Svalbard.*", "Macedonia, The Former Yugoslav Republic of", "United Kingdom.*", "United States of America", "United States Virgin Islands", "Cape Verde", "Palestinian Territory, Occupied"),
+  c("Korea, North", "Korea, South", "Gambia, The", "", "Antarctica", "Bahamas, The", "Bouvet Island", "British Indian Ocean Territory", "Burma", "Czechia", "Falkland Islands \\(Islas Malvinas\\)", "South Georgia and South Sandwich Islands", "French Southern and Antarctic Lands", "Gabon", "Fiji", "Greece", "Guyana", "Holy See \\(Vatican City\\)", "Hong Kong", "Kyrgyzstan", "Laos", "Libya", "Macau", "Curacao", "Sint Maarten", "United States Pacific Island Wildlife Refuges", "Saint Helena, Ascension, and Tristan da Cunha", "Slovakia", "Svalbard", "North Macedonia", "United Kingdom", "United States", "Virgin Islands", "Cabo Verde", "Palestine"))
+#regions$Country_Name[grep("Congo", regions$Country_Name)]
+#grep("Congo", regions$Country_Name)
+testNames[51] <- "Congo, Republic of the"
+testNames[52] <- "Congo, Democratic Republic of the"
+
+#both <- intersect(testNames, worldFacts$country)
+#testNames[!testNames %in% both]
+#worldFacts$country[!worldFacts$country %in% both]
+
+regions$country <- testNames
+```
+
+An issue I encountered was with "Republic of the Congo" and "Democratic Republic of the Congo", both of which in the data cleaning process got reduced to "Congo". I referenced the original country names from the .csv file to determine which Congo was which, and manually replaced them, and then applied `myMerge()` on this new dataframe and the `worldFacts` dataframe.
+
+```{r, include = FALSE}
+WF <- myMerge(regions, worldFacts)
+#names(WF)
+#head(WF)
+WF <- WF[ , c(1:3, 8:22)] #don't need some variables
+#WF <- WF[!is.na(WF$orig), ] #get only the rows that were originally in worldFacts
+worldFacts <- WF
+
+worldFacts$Continent_Code <- as.factor(worldFacts$Continent_Code)
+worldFacts$Continent_Name <- as.factor(worldFacts$Continent_Name)
+```
+
+```{r, include = FALSE}
+worldFacts$Continent_Code <- as.character(worldFacts$Continent_Code)
+worldFacts$Continent_Code[worldFacts$Continent_Name == "North America"] <- "NAm"
+worldFacts$Continent_Code <- as.factor(worldFacts$Continent_Code)
+```
+
+#### Democracy Index and Homicide Rate
+After reading the 2 .csv files into RStudio, I used `replaceNames()` to clean up the country names in the 2 .csv files, then merged them with the `worldFacts` dataframe using `myMerge()`.
+
+**To run the following code, please go to the links in the code comments and download the relevant data, because when I uploaded the .csv files onto Dropbox, the files didn't load correctly.**
+
+```{r, include = FALSE}
+#Democracy Index (Please download and access data here: https://worldpopulationreview.com/countries/democracy-countries/)
+gov <- read.csv("C:\\Users\\pearl\\OneDrive\\Documents\\STAT 230\\Final Project\\Democracy.Index.csv", stringsAsFactors = FALSE)
+head(gov)
+
+gov$name <- replaceNames(
+  gov$name, 
+  c("Cape Verde", "Czech Republic", "DR Congo", "Gambia$", "Ivory Coast", "Myanmar", "North Korea", "South Korea", "Republic of the Congo"), 
+  c("Cabo Verde", "Czechia", "Congo, Democratic Republic of the", "Gambia, The", "Cote d'Ivoire", "Burma", "Korea, North", "Korea, South", "Congo, Republic of the"))
+
+#both <- intersect(gov$name, worldFacts$country)
+#sort(gov$name[!gov$name %in% both])
+#sort(worldFacts$country[!worldFacts$country %in% both])
+
+gov$country <- gov$name
+
+WF2 <- myMerge(worldFacts, gov)
+#names(WF2)
+WF2 <- WF2[ , c(1:18, 20)]
+#WF2 <- WF2[!is.na(WF2$orig), ]
+worldFacts <- WF2
+```
+```{r, include = FALSE}
+#IHME (1990 to 2017) - Homicide rate, only using data from 2017 (Please download and access data here: https://ourworldindata.org/grapher/homicide-rates-from-firearms)
+homicide <- read.csv("C:\\Users\\pearl\\OneDrive\\Documents\\STAT 230\\Final Project\\homicide-rate.csv", stringsAsFactors = FALSE)
+head(homicide)
+homicide <- homicide[homicide$Year == 2017, ]
+names(homicide)[4] <- "Deaths_per_100000"
+```
+
+Here is an example of using `replaceNames()` on country names (called `Entity` here) in the `homicide` dataframe:
+
+```{r}
+homicide$Entity <- replaceNames(
+  homicide$Entity, 
+  c("Democratic Republic of Congo", "^Congo$", "Czech Republic", "South Korea", "Bahamas$", "Cape Verde", "Gambia$", "Myanmar", "Timor$", "United States Virgin Islands"), 
+  c("Congo, Democratic Republic of the", "Congo, Republic of the", "Czechia", "Korea, South", "Bahamas, The", "Cabo Verde", "Gambia, The", "Burma", "Timor-Leste", "Virgin Islands"))
+```
+
+```{r, include = FALSE}
+both <- intersect(homicide$Entity, worldFacts$country)
+sort(homicide$Entity[!homicide$Entity %in% both])
+sort(worldFacts$country[!worldFacts$country %in% both])
+
+homicide$country <- homicide$Entity
+
+WF3 <- myMerge(worldFacts, homicide)
+#names(WF3)
+WF3 <- WF3[ , c(1:19, 23)]
+#head(WF3, 50)
+worldFacts <- WF3
+
+```
+
+
+
+### **Analysis & Plots**
+#### *1) Life Expectancy and Median Age (Theoretical and Bootstrapped CIs)*
+Here I look at the correlation between life expectancy and median age. Here is a plot of the data:
+
+```{r, echo = FALSE}
+WF4 <- worldFacts[ , c("country", "lifeExpect", "medianAge")]
+WF4 <- WF4[complete.cases(WF4), ]
+
+cor1 <- cor(WF4$lifeExpect, WF4$medianAge)
+lmA <- lm(lifeExpect ~ medianAge, data = WF4)
+
+plot(lifeExpect ~ medianAge, data = worldFacts, pch = 19, col = "skyblue", xlab = "Median Age", ylab = "Life Expectancy")
+mtext("Relationship Median Age and Life Expectancy", cex = 1.2, line = 1)
+mtext(paste("Correlation = ", round(cor1, 2), ", slope = ", round(lmA$coef[2],2), sep = ""), line = 0, cex = 1)
+abline(lmA$coef, col = "blue", lwd = 3)
+text(WF4$medianAge[WF4$country == "United States"], WF4$lifeExpect[WF4$country == "United States"], "US")
+```
+
+There appears to the a strong positive correlation between median age in a country and the life expectancy at birth in the country. The calculated correlation is `r cor1`.
+
+```{r, echo = FALSE}
+summary(lmA)
+```
+
+The correlation appears to be statistically significant, being a lot smaller than 0.05.   
+Here are the residual plots:
+
+```{r, echo = FALSE}
+myResPlots2(lmA)
+```
+
+We observe slight nonlinearity to the bottom left of the normal quantile plot of residuals, but otherwise our residual plots indicate that the assumptions behind our model is reasonable.
+
+##### Bootstrapping
+I perform boostrapping with 1000 samples. The code is as follows.
+
+```{r}
+N <- nrow(WF4)
+n_samp <- 10000 #take 10000 samples
+corResults <- rep(NA, n_samp)
+bResults <- rep(NA, n_samp) 
+
+for(i in 1:n_samp){
+  s <- sample(1:N, N , replace = T)
+  sVals <- as.numeric(names(table(s)))
+  sCounts <-  as.vector(table(s))
+  bootAge <-  rep(WF4$medianAge[sVals], sCounts)
+  bootLife <-  rep(WF4$lifeExpect[sVals], sCounts)
+  corT <- cor(bootAge, bootLife)
+  lmT <- lm(bootLife ~ bootAge)
+  corResults[i] <-  corT    
+  bResults[i] <-  lmT$coef[2]
+}
+```
+
+This gives me the following CIs for correlation and slope:
+
+```{r, echo = FALSE}
+print("Bootstrapped CI for correlation:")
+(ci_r <- quantile(corResults, c(.025, .975)))
+print("Bootstrapped CI for slope:")
+(ci_slope <- quantile(bResults, c(.025, .975)))
+```
+
+Here is the histogram for bootstrapped correlations. The bootstrapped CI appear to be narrower than the theoretical CI, which is probably due to a few more influential points that are not as often included in the bootstrapped samples.
+
+```{r, echo = FALSE}
+hist(corResults, col = "lightyellow", main = "Bootstrapped Correlations", xlab = "Sample Correlation", breaks = 40, cex.main = 1.1)
+
+abline(v = ci_r, lwd = 3, col = "red")
+abline(v = cor.test(WF4$lifeExpect, WF4$medianAge)$conf.int, lwd = 3, col = "green", lty = 2)
+legend("topleft", c("Theoretical CI","Boot CI"), lwd = 3, col = c("green","red"), lty = c(2,1))
+```
+
+Here is the histogram for bootstrapped slopes. The bootstrapped CI is very close to the theoretical CI.
+
+```{r, echo = FALSE}
+hist(bResults, col = "lightpink", main = "Bootstrapped Slopes", xlab = "Sample Slope", breaks = 50, cex.main = 1.1)
+abline(v = ci_slope, lwd = 3, col = "red")
+abline(v = confint(lmA,'medianAge'), lwd = 3, col = "green", lty = 2)
+legend("topleft", c("Theoretical CI","Boot CI"), lwd=3, col = c("green","red"), lty = c(2,1))
+```
+
+
+
+#### *2) Democracy Index and Status of Same-Sex Marriage (t-test and Permutation Test)*
+Here I look at the relationship between democracy index and the status of same-sex marriage. In particular, I perform a permutation test to determine whether there is a difference between the mean democracy indices of countries that recognize and don't recognize same-sex marriage.   
+A boxplot of democracy index by status of same-sex marriage suggests that the democracy index of countries that recognize same-sex marriage seem to be higher than that of countries that don't.
+
+```{r, echo = FALSE}
+WF5 <- worldFacts[!is.na(worldFacts$democracyScore), c("country", "democracyScore", "SameSexMarriage")]
+WF5$SameSexMarriage[is.na(WF5$SameSexMarriage)] <- "Not recognized"
+
+boxplot(democracyScore ~ SameSexMarriage, data = WF5, cex.main = 1.15, main = "Dem Index by Status of Same-Sex Marriage", ylab = "Democracy Index", xlab = "Status of Same-Sex Marriage", col = c("slategray1", "steelblue1"))
+```
+
+
+Performing a t-test, we obtain the following results.
+
+```{r, echo = FALSE}
+(test1 <- t.test(democracyScore ~ SameSexMarriage, data = WF5))
+```
+
+The p-value, `r test1$p.value` is very small (< 0.05), and the confidence interval does not include 0, which suggests that the difference between democracy index of countries that recognize same-sex marriage and that of countries that don't is not zero.   
+
+Next I perform a permutation test. The actual difference between the two groups in the sample is:
+
+```{r, echo = FALSE}
+#get actual mean differences
+actualdiff <- by(WF5$democracyScore, WF5$SameSexMarriage, mean)
+print("Difference between sample means:")
+(actualdiff <- actualdiff[1] - actualdiff[2])
+```
+
+We repeated our permutation many times (10000), as follows.
+
+```{r}
+N <- 10000
+diffvals <- rep(NA, N)
+for (i in 1:N) {
+  fakestatus <- sample(WF5$SameSexMarriage)  # default is replace = FALSE
+  diffvals[i] <- mean(WF5$democracyScore[fakestatus == "Not recognized"]) -  mean(WF5$democracyScore[fakestatus == "Recognized"])
+}
+```
+
+Here is a histogram of the permuted sample means difference from the bootstrapping.
+
+```{r, echo = FALSE}
+hist(diffvals, col = "powderblue", main = "Permuted Sample Means Diff in Dem Index", xlab = "Score", breaks = 40, xlim = c(actualdiff - 0.3, 2))
+abline(v = actualdiff, col = "blue", lwd = 2)
+text(actualdiff - 0.13, 350 , paste("Actual Diff in Means =", round(actualdiff, 2)), srt = 90, cex = 0.8)
+```
+
+The p-value of the actual difference in means from this bootstrapped distribution is calculated as follows, and we see that it is basically 0.
+
+```{r}
+mean(abs(diffvals) >= abs(actualdiff))
+```
+
+Therefore we reject the null hypothesis that there is no difference between the means in our two groups, and conclude that the true difference between the means is not zero. More specifically, the democracy index of countries that recognize same-sex marriage is higher than that of countries that do not.
+
+
+
+
+#### *3) Homicide Rate, Military Expenditure, and Continent (ANCOVA)*
+Here I perform ANCOVA for log of homicide rate based on the log of military expenditure and the categorical continent variables.
+
+```{r, include = FALSE}
+WF10 <- worldFacts[ , c("country", "Continent_Name", "militaryExp", "Deaths_per_100000")]
+WF10 <- WF10[complete.cases(WF10), ]
+WF10$logHom <- log(WF10$Deaths_per_100000)
+WF10$logMilExp <- log(WF10$militaryExp)
+continent <- droplevels.factor(WF10$Continent_Name)
+names(WF10)
+```
+
+Applying `Anova()` to the model containing military expenditure, continent, and their interaction, we see that the interaction term is statistically significant at the $\alpha = 0.05$ level.
+
+```{r}
+m2 <- lm(logHom ~ logMilExp*Continent_Name, data = WF10)
+Anova(m2)
+```
+
+```{r, include = FALSE}
+summary(m2)
+```
+
+Here is a visual representation of this model:
+
+```{r}
+plot(logHom ~ logMilExp, data = WF10, col = factor(continent), pch = 19, main = "Homicide Rate vs Military Expenditure", ylab = "Log(Homicide Rate)", xlab = "Log(Military Expenditure)")
+coefs <- coef(m2)
+abline(a = coefs[1], b = coefs[2], col = "black", lwd = 3)
+for (i in 3:7){
+  abline(a = coefs[1] + coefs[i], b = coefs[2] + coefs[i+5], col = (i-1), lwd = 3)
+}
+legend("topleft", col = 1:6, legend = levels(factor(continent)), pch = 16, cex = 0.7)
+```
+
+For all countries except those in Europe and Africa, it seems that lower homicide rate tends to go with higher military expenditure.
+
+
+#### *4) Homicide Rate (Best Subsets Regression)*
+Here I use best subsets regression to build a multiple regression model for the log of homicide rate. First, I create a new variable `logHomi` in `worldFacts`, which is the log of homicides (measured as deaths per 100000 people).
+
+```{r}
+worldFacts$logHomi <- log(worldFacts$Deaths_per_100000)
+```
+
+Next I create a new dataframe `WF8` with the relevant (continuous) variables:
+
+```{r}
+#names(worldFacts)
+WF8 <- worldFacts[ , c(21, 4:9, 11:15, 19)]
+WF8 <- WF8[complete.cases(WF8), ]
+names(WF8)
+```
+
+I used a matrix plot to check relationships between our variables.
+
+```{r}
+pairsJDRS(WF8, labels = names(WF8))
+```
+
+Based on the matrix plot, I decided to replace the variables `importsUSD` (imports), `exportsUSD` (exports), `CO2` (CO2 emission), and `energyCons` (energy use) with the log of themselves, due the the nature of the type of data (imports and exports are money data, and CO2 emission and energy use are both right-skewed).
+
+```{r}
+WF8$importsUSD <- log(WF8$importsUSD)
+WF8$exportsUSD <- log(WF8$exportsUSD)
+WF8$CO2 <- log(WF8$CO2)
+WF8$energyCons <- log(WF8$energyCons)
+```
+
+Next I apply `regsubsets()` to determine the best subsets with various numbers of predictors, and save the summary in a variable called `mod1sum`.
+
+```{r}
+mod1 <- regsubsets(logHomi ~ ., data = WF8, nvmax = 12)
+mod1sum <- summary(mod1)
+```
+
+##### Best Model According to Adjusted R-Squared
+According to adjusted R-squared, the best model is a model with the following predictors:
+
+```{r}
+names(WF8)[mod1sum$which[which.max(mod1sum$adjr2), ]][-1]
+```
+
+```{r, include = FALSE}
+WFtemp <- WF8[,mod1sum$which[which.max(mod1sum$adjr2), ]]
+lmAdjr2 <- lm(logHomi ~ .,data = WFtemp)
+summary(lmAdjr2)
+```
+
+The R-squared value for this model is 0.4601, indicating that this model accounts for about 46% of the variability in the log of homicide rate. However, this model has 11 predictors, including ones that are not statistically significant at the $\alpha = 0.05$ level.
+
+##### Best Model According to BIC
+Next I use the Bayesian Information Criterion (BIC) to determine a model. This model includes the following predictors:
+
+```{r}
+names(WF8)[mod1sum$which[which.min(mod1sum$bic), ]][-1]
+```
+
+Here is the summary of this model:
+```{r}
+WFtemp <- WF8[,mod1sum$which[which.min(mod1sum$bic), ]]
+lmBIC <- lm(logHomi ~ ., data = WFtemp)
+summary(lmBIC)
+```
+
+From summary information of this model, we see that all predictors are statistically significant at the $\alpha = 0.05$ level, and compared to the model based on adjusted R-squared, this model based on the BIC contains only 5 predictor variables. However, the R-squared value of this model is lower, indicating that this model explains only about 40% of the variation in the log of homicide rate.   
+Here are the residual plots of the best model according to the BIC:
+
+```{r, echo = FALSE}
+myResPlots2(lmBIC)
+```
+
+The residual plots look pretty good. Other than the top-right corner, the normal quantile plot of residuals appears approximately linear, and the fits vs residuals plot does not show signs of heteroskadacity.
+
+##### Best Model According to the $C_p$ Statistic
+Next I try using the $C_p$ statistic to determine a model. This model contains the following predictors:
+
+```{r}
+modCP <- min(c(1:length(mod1sum$cp))[mod1sum$cp < c(1:length(mod1sum$cp)) + 1])
+names(WF8)[mod1sum$which[modCP, ]][-1]
+```
+
+```{r, include = FALSE}
+WFtemp <- WF8[,mod1sum$which[modCP,]]
+lmCp <- lm(logHomi ~ ., data = WFtemp)
+summary(lmCp)
+```
+
+The R-squared value for this model is 0.4533, only slightly lower than that of the model based on adjusted R-squared. However, this model also contains a few predictors that are not statistically significant at the $\alpha = 0.05$ level.
+
+##### Best Model According to the AIC
+Lastly, I use the Akaike Information Criterion (AIC) to determine a model. This model contains the following 9 predictor variables:
+
+```{r}
+npred <- length(mod1sum$bic)
+AICvec <- rep(NA, npred)
+for (i in 1:npred){
+  WFtemp <- WF8[,mod1sum$which[i,]]
+  AICvec[i] <- AIC(lm(logHomi ~ .,data = WFtemp))
+}
+names(WF8[,mod1sum$which[which.min(AICvec), ]])[2:10]
+```
+
+Here is the summary of this model:
+```{r}
+WFtemp <- WF8[ ,mod1sum$which[which.min(AICvec), ]]
+lmAIC <- lm(logHomi ~ ., data = WFtemp)
+summary(lmAIC)
+```
+
+The R-Squared value for this model is 0.4475, indicating that it accounts for about 44.75% of the variation in the log of homicide rate. All but one variable is statistically significant at the $\alpha = 0.05$ level.   
+Here are the residual plots for the best model according to the AIC:
+
+```{r, echo = FALSE}
+myResPlots2(lmAIC)
+```
+
+Comparing the R-Squared values and residual plots of the BIC model and this model, I noticed that the normal quantile plot of residuals of this model appear more linear than that of the BIC model, which means that the residuals of this model are more approximately normal than the residuals of the BIC model. The adjusted R-squared model and the $C_p$ statistic model both contain too many predictors, so I decided to not consider them.
+
+
+
+
+
+
+### **Conclusions and Summary**
+First, we see that life expectancy and median age are strongly and positively correlated, with a statistically significant correlation. This indicates that countries with higher median ages tend to also have higher life expectancies at birth (which is not surprising).   
+Second, we see that the true difference in the mean democracy index of countries that recognize same-sex marriage and that of countries that do not is not 0. Specifically, the mean democracy index of countries that recognize same-sex marriage is higher than that of countries that do not.   
+Third, the ANCOVA model for homicide rate, military expenditure, and continent shows that 1) the interaction between continent and log military expenditure is significant in predicting the log homicide rate of a country and 2) that in all continents except Europe and Africa, it seems that lower homicide rate tends to go with higher military expenditure.   
+Lastly, the best subsets regression gives two models: one based on the BIC and the other based on the AIC. The AIC model has a higher R-squared value, and contains all the predictors that are in the BIC model. These predictors are: total fertility, GDP per capital, life expectancy, median age, and democracy index. On the other hand, the predictors in the BIC model are all statistically significant at the $\alpha = 0.05$ level, although the R-squared value is smaller.   
+In particular, in both models we see that log homicide rate is negatively correlated to fertility, GDP, life expectancy, and median age; whereas it is positively correlated to democracy index. This would suggest that the higher the democracy index of a country is, the higher the log of its homicide rate is likely to be.
+
+
+
